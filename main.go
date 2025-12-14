@@ -1,17 +1,19 @@
 package main
 
 import (
-    "log"
+    "mini_go/logger"
     "mini_go/server"
+    "go.uber.org/zap"
 )
 
 func main() {
+    logger.InitLogger()
     srv := server.NewHTTPServer()
 
     go func() {
-        log.Println("Server running at :8080")
+        zap.L().Info("Server started", zap.String("addr", ":8080"))
         if err := srv.ListenAndServe(); err != nil && err.Error() != "http: Server closed" {
-            log.Fatalf("Listen error: %s\n", err)
+            zap.L().Fatal("Listen error", zap.Error(err))
         }
     }()
 

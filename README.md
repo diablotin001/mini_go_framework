@@ -119,7 +119,7 @@ Gin + net/http 自带 goroutine 池，适合高负载。
 保障生产环境稳定性。
 
 ---
-STEP3: 添加全局错误处理器（error handler）、统一返回结构（success/error struct）
+# STEP3: 添加全局错误处理器（error handler）、统一返回结构（success/error struct）
 
 ---
 
@@ -216,6 +216,105 @@ func Login(c *gin.Context) {
 {
   "code": 10000,
   "msg": "something wrong"
+}
+```
+
+---
+
+# STEP4: **生产级 Zap 日志系统的完整接入方案**
+
+* 全局统一 Zap Logger（JSON 输出、按天轮转、支持 Info/Error）
+* Gin 日志改为 Zap（替代默认 Logger）
+* 请求日志：包含 method/path/status/latency/ip
+* Panic 日志：完整 stack trace
+* 所有业务模块可直接使用：`zap.L().Info(...)`
+
+---
+
+# 一、目录结构（新增 logger/）
+
+```
+yourapp/
+├── logger/
+│     └── logger.go
+├── middleware/
+│     ├── zap_request.go
+│     └── zap_recovery.go
+└── server/router.go
+```
+
+---
+
+# 二、生产级 Zap 日志初始化（JSON + 文件分割）
+
+位置：`logger/logger.go`
+
+使用 **lumberjack** 实现日志切割
+Zap 使用 JSON 格式（适合 ELK / CloudWatch / Loki）
+
+---
+
+# 三、在 main.go 初始化 Zap 日志
+
+```go
+func main() {
+	logger.InitLogger() // 添加这一行
+
+	...
+}
+```
+
+---
+
+# 四、接入 Gin 请求日志（用 Zap 替换 Gin 的默认日志）
+
+新增文件：
+
+## `middleware/zap_request.go`
+
+---
+
+# 五、Zap Panic 恢复（带 stacktrace）
+
+新增文件：
+
+## `middleware/zap_recovery.go`
+
+---
+
+# 六、在 router.go 中启用 Zap 中间件
+
+```go
+r := gin.New()
+
+r.Use(middleware.ZapLogger())    // 请求日志
+r.Use(middleware.ZapRecovery())  // panic 日志
+
+...
+```
+
+---
+
+# 七、业务模块可以直接使用 Zap
+
+任何地方都可以：
+
+```go
+zap.L().Info("user logged in", zap.String("user", req.Username))
+zap.L().Error("db failed", zap.Error(err))
+```
+
+---
+
+# 八、日志输出示例（JSON，可直接进入 ELK）
+
+```json
+{
+  "level": "info",
+  "time": "2025-12-11T16:34:22+08:00",
+  "caller": "user/handler.go:21",
+  "msg": "user logged in",
+  "user": "alice"
 }
 ```
 

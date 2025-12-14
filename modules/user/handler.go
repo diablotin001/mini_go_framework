@@ -4,6 +4,7 @@ import (
 	"mini_go/response"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func Login(c *gin.Context) {
@@ -15,6 +16,7 @@ func Login(c *gin.Context) {
 	response.Success(c, gin.H{
 		"user": req.Username,
 	})
+	zap.L().Info("user logged in", zap.String("user", req.Username))
 }
 
 func Register(c *gin.Context) {

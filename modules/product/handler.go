@@ -4,12 +4,14 @@ import (
 	"mini_go/response"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func List(c *gin.Context) {
 	response.Success(c, gin.H{
 		"products": []string{"apple", "banana", "milk"},
 	})
+	zap.L().Info("product list fetched")
 }
 
 func Buy(c *gin.Context) {
