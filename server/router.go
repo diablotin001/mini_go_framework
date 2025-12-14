@@ -13,6 +13,7 @@ import (
 func NewHTTPServer() *http.Server {
     r := gin.New()
     r.Use(gin.Recovery())
+    r.Use(middleware.ErrorHandler())
     r.Use(middleware.Validator())
 
     userGroup := r.Group("/user")

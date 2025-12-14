@@ -119,4 +119,104 @@ Gin + net/http 自带 goroutine 池，适合高负载。
 保障生产环境稳定性。
 
 ---
+STEP3: 添加全局错误处理器（error handler）、统一返回结构（success/error struct）
 
+---
+
+最终效果：
+
+* 业务 handler 不需要 `c.JSON` 来重复写结构
+* 只需返回 `c.Error(err)` 或 `response.Success(c, data)` 即可
+* 所有错误格式统一
+* 错误码可扩展（业务错误码、系统错误码）
+
+---
+
+# ✅ **一、统一返回结构 response/**
+
+目录
+
+```
+response/
+│── response.go
+│── error.go
+│── codes.go
+```
+
+---
+
+# 🧩 response/response.go（统一 Success 返回）
+
+---
+
+# 🧩 response/codes.go（自定义错误码：可无限扩展）
+
+---
+
+# 🧩 response/error.go（错误统一格式）
+
+---
+
+# ✅ **二、全局错误处理器 middleware/error_handler.go**
+
+---
+
+# ⭐ ** server/router.go 加这个中间件**
+
+```go
+...
+r.Use(middleware.ErrorHandler())   // 全局错误处理
+...
+```
+
+---
+
+# 📌 三、修改 Validator 中间件
+
+---
+
+# 📌 四、业务 Handler 改为使用统一响应
+
+## user/login：
+
+```go
+func Login(c *gin.Context) {
+	var req LoginRequest
+
+	if err := c.ShouldBind(&req); err != nil {
+		c.Error(err) // 自动交给全局错误处理
+		return
+	}
+
+	response.Success(c, gin.H{
+		"user": req.Username,
+	})
+}
+```
+
+---
+
+# 🎉 最终效果展示
+
+## ✔ 成功统一格式：
+
+```json
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "user": "alice"
+  }
+}
+```
+
+## ❌ 系统错误统一格式：
+
+```json
+{
+  "code": 10000,
+  "msg": "something wrong"
+}
+```
+
+---
