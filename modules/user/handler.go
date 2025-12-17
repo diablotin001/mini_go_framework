@@ -9,23 +9,28 @@ import (
 
 func Login(c *gin.Context) {
 	var req LoginRequest
-	if err := c.ShouldBind(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(err).SetType(gin.ErrorTypeBind)
 		return
 	}
-	response.Success(c, gin.H{
-		"user": req.Username,
-	})
-	zap.L().Info("user logged in", zap.String("user", req.Username))
+	u, err := LoginService(req.Username, req.Password)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response.Success(c, gin.H{"user": u.Username})
+	zap.L().Info("user logged in", zap.String("user", u.Username))
 }
 
 func Register(c *gin.Context) {
 	var req RegisterRequest
-	if err := c.ShouldBind(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(err).SetType(gin.ErrorTypeBind)
 		return
 	}
-	response.Success(c, gin.H{
-		"msg": "registered",
-	})
+	if err := RegisterService(req.Username, req.Password, req.Email); err != nil {
+		c.Error(err)
+		return
+	}
+	response.Success(c, nil)
 }

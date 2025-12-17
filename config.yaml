@@ -1,0 +1,10 @@
+server:
+  addr: ":8080"
+db:
+  dsn: "root:aaaaaa@tcp(127.0.0.1:3306)/jc_test?charset=utf8mb4&parseTime=True&loc=Local"
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+logs:
+  path: "logs/app.log"

@@ -319,3 +319,297 @@ zap.L().Error("db failed", zap.Error(err))
 ```
 
 ---
+# STEP5 — repo / service / handler（三层）
+
+前置条件：
+* 请自行准备可以访问的MySQL和Redis
+
+主要添加：
+* GORM(MySQL) + Redis 访问封装
+* 模块化：modules/user、modules/product（每个含 handler/service/repo/dto）
+
+---
+
+## 项目树（新增内容）
+
+```
+...
+├── pkg/
+│   ├── db/
+│   │   └── mysql.go
+│   └── cache/
+│       └── redis.go
+├── modules/
+│   ├── user/
+│   │   ├── handler.go
+│   │   ├── service.go
+│   │   ├── repo.go
+│   │   └── dto.go
+│   └── product/
+│       ├── handler.go
+│       ├── service.go
+│       ├── repo.go
+│       └── dto.go
+└── config.yaml
+```
+
+---
+
+## config.yaml
+
+```yaml
+server:
+  addr: ":8080"
+
+db:
+  dsn: "user:pass@tcp(127.0.0.1:3306)/yourdb?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+logs:
+  path: "logs/app.log"
+```
+请设置user:pass为正确的用户名和密码
+---
+
+## pkg/db/mysql.go
+
+```go
+package db
+
+import (
+    "log"
+
+    "gorm.io/driver/mysql"
+    "gorm.io/gorm"
+    "gorm.io/gorm/logger"
+)
+
+var DB *gorm.DB
+
+func InitMySQL(dsn string) error {
+    var err error
+    DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+        Logger: logger.Default.LogMode(logger.Silent),
+    })
+    if err != nil {
+        return err
+    }
+
+    sqlDB, err := DB.DB()
+    if err != nil {
+        return err
+    }
+    sqlDB.SetMaxOpenConns(50)
+    sqlDB.SetMaxIdleConns(10)
+    return nil
+}
+```
+
+---
+
+## pkg/cache/redis.go
+
+```go
+package cache
+
+import (
+    "context"
+    "time"
+
+    "github.com/go-redis/redis/v8"
+)
+
+var RDB *redis.Client
+var Ctx = context.Background()
+
+func InitRedis(addr, password string, db int) error {
+    RDB = redis.NewClient(&redis.Options{
+        Addr:     addr,
+        Password: password,
+        DB:       db,
+    })
+
+    _, err := RDB.Ping(Ctx).Result()
+    if err != nil {
+        return err
+    }
+    return nil
+}
+
+func GetString(key string) (string, error) {
+    return RDB.Get(Ctx, key).Result()
+}
+
+func SetString(key string, value interface{}, ttl time.Duration) error {
+    return RDB.Set(Ctx, key, value, ttl).Err()
+}
+```
+
+---
+
+## main.go
+
+```go
+package main
+
+import (
+    "log"
+
+    "yourapp/logger"
+    "yourapp/pkg/cache"
+    "yourapp/pkg/db"
+    "yourapp/server"
+)
+
+func main() {
+    // 1. init logger
+    logger.InitLogger("logs/app.log")
+
+    // 2. init mysql
+    if err := db.InitMySQL("user:pass@tcp(127.0.0.1:3306)/yourdb?charset=utf8mb4&parseTime=True&loc=Local"); err != nil {
+        log.Fatal("db init failed:", err)
+    }
+
+    // 3. init redis
+    if err := cache.InitRedis("127.0.0.1:6379", "", 0); err != nil {
+        log.Fatal("redis init failed:", err)
+    }
+
+    srv := server.NewHTTPServer()
+    go func() {
+        if err := srv.ListenAndServe(); err != nil && err.Error() != "http: Server closed" {
+            log.Fatal(err)
+        }
+    }()
+
+    server.WaitForShutdown(srv)
+}
+```
+
+---
+
+## modules/user/repo.go
+
+```go
+package user
+
+import (
+    "time"
+
+    "yourapp/pkg/cache"
+    "yourapp/pkg/db"
+)
+
+type UserModel struct {
+    ID        uint `gorm:"primaryKey"`
+    Username  string
+    Password  string
+    Email     string
+    CreatedAt time.Time
+}
+
+func GetUserByUsername(username string) (*UserModel, error) {
+    // try cache first
+    key := "user:username:" + username
+    if s, err := cache.GetString(key); err == nil && s != "" {
+        // 简化：真实场景要 json.Unmarshal
+        return &UserModel{Username: s}, nil
+    }
+
+    var u UserModel
+    if err := db.DB.Where("username = ?", username).First(&u).Error; err != nil {
+        return nil, err
+    }
+    // set cache
+    _ = cache.SetString(key, u.Username, 60*60)
+    return &u, nil
+}
+
+func CreateUser(u *UserModel) error {
+    return db.DB.Create(u).Error
+}
+```
+
+---
+
+## modules/user/service.go
+
+```go
+package user
+
+import (
+    "errors"
+)
+
+func LoginService(username, password string) (*UserModel, error) {
+    u, err := GetUserByUsername(username)
+    if err != nil {
+        return nil, err
+    }
+    // 简化密码比较
+    if u.Password != password {
+        return nil, errors.New("invalid credentials")
+    }
+    return u, nil
+}
+
+func RegisterService(username, password, email string) error {
+    u := &UserModel{Username: username, Password: password, Email: email}
+    return CreateUser(u)
+}
+```
+
+---
+
+## modules/user/handler.go
+
+```go
+package user
+
+import (
+    "github.com/gin-gonic/gin"
+    "yourapp/response"
+)
+
+func Login(c *gin.Context) {
+    var req LoginRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.Error(err)
+        return
+    }
+    u, err := LoginService(req.Username, req.Password)
+    if err != nil {
+        c.Error(err)
+        return
+    }
+    response.Success(c, gin.H{"user": u.Username})
+}
+
+func Register(c *gin.Context) {
+    var req RegisterRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.Error(err)
+        return
+    }
+    if err := RegisterService(req.Username, req.Password, req.Email); err != nil {
+        c.Error(err)
+        return
+    }
+    response.Success(c, nil)
+}
+```
+
+---
+
+## modules/product/repo.go
+
+## modules/product/service.go
+
+## modules/product/handler.go
+
+---
+
