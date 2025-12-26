@@ -13,13 +13,13 @@ func Login(c *gin.Context) {
 		c.Error(err).SetType(gin.ErrorTypeBind)
 		return
 	}
-	u, err := LoginService(req.Username, req.Password)
+	token, err := LoginService(req.Username, req.Password)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	response.Success(c, gin.H{"user": u.Username})
-	zap.L().Info("user logged in", zap.String("user", u.Username))
+	response.Success(c, gin.H{"token": token})
+	zap.L().Info("user logged in", zap.String("user", req.Username))
 }
 
 func Register(c *gin.Context) {

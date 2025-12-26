@@ -25,6 +25,7 @@ func NewHTTPServer() *http.Server {
 
     productGroup := r.Group("/product")
     {
+        productGroup.Use(middleware.JWTAuth())
         productGroup.GET("/list", product.List)
         productGroup.POST("/buy", product.Buy)
     }

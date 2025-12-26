@@ -613,3 +613,254 @@ func Register(c *gin.Context) {
 
 ---
 
+# STEP6.1 — **完整的 JWT 鉴权方案**
+* middleware：JWTAuth
+* user/login：生成 JWT
+* config：JWT 配置
+* router：如何给路由使用 JWT
+* service：登录逻辑
+* repo：查询用户
+
+---
+
+# 1. 需要修改/新增的文件列表
+
+```
+config/config.go         ← 增加 JWT 配置读取
+config.yaml              ← 增加 JWT 配置项
+
+internal/middleware/jwt.go    ← 新增 JWT 鉴权中间件
+
+internal/repo/user_repo.go    ← 增加 GetByUsername
+internal/service/user_service.go  ← 登录逻辑（验证密码 + 生成 token）
+internal/handler/user_handler.go  ← 新增 /login API
+
+internal/server/router.go     ← /login 不需要鉴权，其他路由需要
+```
+
+---
+
+# 2. 修改内容（按文件分类）
+
+---
+
+# 🔧 **config/config.go（增加 JWT 配置项）**
+
+```go
+type JWTConfig struct {
+    Secret string
+    Expire time.Duration
+}
+
+type Config struct {
+    ...
+    JWT  JWTConfig
+}
+
+func Init(path string) {
+    ...
+    Conf.JWT.Secret = v.GetString("jwt.secret")
+    Conf.JWT.Expire = v.GetDuration("jwt.expire")
+}
+```
+
+---
+
+# 🔧 **config.yaml（新增 JWT 配置）**
+
+```yaml
+jwt:
+  secret: "my_super_secret_key_123"
+  expire: "72h"
+```
+
+---
+
+# **middleware/jwt.go（JWT 鉴权）**
+
+```go
+package middleware
+
+import (
+    "net/http"
+    "strings"
+
+    "github.com/gin-gonic/gin"
+    "github.com/golang-jwt/jwt/v4"
+    "yourapp/config"
+)
+
+func JWTAuth() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        auth := c.GetHeader("Authorization")
+        if auth == "" {
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 10002, "msg": "missing token"})
+            return
+        }
+
+        parts := strings.SplitN(auth, " ", 2)
+        if len(parts) != 2 || parts[0] != "Bearer" {
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 10002, "msg": "invalid token format"})
+            return
+        }
+
+        tokenStr := parts[1]
+        token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+            return []byte(config.Conf.JWT.Secret), nil
+        })
+
+        if err != nil || !token.Valid {
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 10002, "msg": "invalid or expired token"})
+            return
+        }
+
+        // 解析 claims
+        if claims, ok := token.Claims.(jwt.MapClaims); ok {
+            c.Set("user_id", claims["uid"])
+        }
+
+        c.Next()
+    }
+}
+```
+
+---
+
+# **internal/repo/user_repo.go（增加用于登录的查询）**
+
+```go
+func (r *UserRepo) GetByUsername(username string) (*model.User, error) {
+    var user model.User
+    if err := r.db.Where("username = ?", username).First(&user).Error; err != nil {
+        return nil, err
+    }
+    return &user, nil
+}
+```
+
+---
+
+# **internal/service/user_service.go（登录逻辑 + JWT 生成）**
+
+```go
+package service
+
+import (
+    "errors"
+    "time"
+
+    "github.com/golang-jwt/jwt/v4"
+    "yourapp/config"
+    "yourapp/internal/repo"
+)
+
+type UserService struct {
+    repo *repo.UserRepo
+}
+
+func NewUserService(r *repo.UserRepo) *UserService {
+    return &UserService{repo: r}
+}
+
+func (s *UserService) Login(username, password string) (string, error) {
+    user, err := s.repo.GetByUsername(username)
+    if err != nil {
+        return "", errors.New("user not found")
+    }
+
+    // 简化：生产环境用 bcrypt
+    if user.Password != password {
+        return "", errors.New("incorrect password")
+    }
+
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+        "uid":  user.ID,
+        "exp":  time.Now().Add(config.Conf.JWT.Expire).Unix(),
+        "iat":  time.Now().Unix(),
+    })
+
+    return token.SignedString([]byte(config.Conf.JWT.Secret))
+}
+```
+
+---
+
+# **internal/handler/user_handler.go（新增 /login 接口）**
+
+```go
+func (h *UserHandler) Login(c *gin.Context) {
+    var req struct {
+        Username string `json:"username" binding:"required"`
+        Password string `json:"password" binding:"required"`
+    }
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(400, gin.H{"code": 10001, "msg": "invalid params"})
+        return
+    }
+
+    token, err := h.service.Login(req.Username, req.Password)
+    if err != nil {
+        c.JSON(401, gin.H{"code": 10002, "msg": err.Error()})
+        return
+    }
+
+    c.JSON(200, gin.H{"code": 0, "msg": "ok", "data": gin.H{"token": token}})
+}
+```
+
+---
+
+# **internal/server/router.go（路由分组）**
+
+```go
+r := gin.New()
+
+// 公共接口
+userGroup := r.Group("/user")
+{
+    userGroup.POST("/login", userHandler.Login)
+}
+
+// 私有接口（需要 JWT）
+authGroup := r.Group("/api", middleware.JWTAuth())
+{
+    authGroup.GET("/profile", userHandler.Profile)
+    // ...
+}
+```
+
+---
+
+# **完整 JWT 工作流**
+
+## 1. 登录
+
+POST `/user/login`
+→ 校验用户
+→ 生成 JWT 返回客户端
+
+客户端保存 token（放 header）
+
+```
+Authorization: Bearer xxxxx
+```
+
+测试命令
+
+```bash
+curl -X POST http://localhost:8080/user/login -H 'Content-Type: application/json' -d '{"username":"alice","password":"secret"}'
+```
+
+## 2. 访问受保护接口
+
+客户端带着 token → middleware/JWTAuth
+→ Token 有效 → 放行
+→ Token 无效 → 401 返回错误
+
+测试命令
+```bash
+curl -H "Authorization: Bearer <JWT>" http://localhost:8080/product/list
+```
+注意：替换<JWT>为user/login返回的token
+
+---
