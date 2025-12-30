@@ -23,8 +23,9 @@ type Config struct {
         Path string `yaml:"path"`
     } `yaml:"logs"`
     JWT struct {
-        Secret string       `yaml:"secret"`
-        Expire yamlDuration `yaml:"expire"`
+        Secret        string       `yaml:"secret"`
+        Expire        yamlDuration `yaml:"expire"`
+        RefreshExpire yamlDuration `yaml:"refresh_expire"`
     } `yaml:"jwt"`
 }
 

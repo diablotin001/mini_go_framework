@@ -11,3 +11,4 @@ logs:
 jwt:
   secret: "my_super_secret_key_123"
   expire: "72h"
+  refresh_expire: "168h"

@@ -864,3 +864,78 @@ curl -H "Authorization: Bearer <JWT>" http://localhost:8080/product/list
 注意：替换<JWT>为user/login返回的token
 
 ---
+
+# STEP 6.2 access_token,refresh_token 刷新与登出
+
+---
+**改动摘要**
+- 新增 `/api/*` 统一分组保护，使用 JWT 中间件统一鉴权
+- 完成 JWT 刷新与黑名单（登出/吊销）：登录返回 access/refresh，刷新生成新 access，登出将 jti 加入黑名单
+
+**配置**
+- `pkg/config/config.go:8` 新增 `JWT.RefreshExpire`，全局持有 `config.Conf`
+- `config.yaml:14` 新增：
+  - `jwt.secret`（签名秘钥）
+  - `jwt.expire`（access token 有效期）
+  - `jwt.refresh_expire`（refresh token 有效期）
+
+**JWT 中间件**
+- `middleware/jwt.go:1` 增强校验：
+  - 解析 `Authorization: Bearer <token>`
+  - 读取 `jti`，查询黑名单 `jwt:blacklist:<jti>`（Redis），命中则拒绝
+  - 将 `uid` 注入 `Context` 供业务使用
+
+**登录/刷新/登出**
+- `modules/user/service.go:1`
+  - `LoginService(username, password) (*TokenPair, error)` 生成并返回 `access_token` 和 `refresh_token`
+  - `RefreshService(refreshToken string) (string, error)` 校验 refresh token 的 `typ=refresh` 并生成新 access token
+  - `LogoutService(accessToken, refreshToken string) error` 解析 `exp` 计算剩余 TTL，将两个 token 的 `jti` 写入黑名单（TTL=剩余有效期）
+  - 令牌携带 claims：`uid`、`typ`（access/refresh）、`jti`、`exp`、`iat`
+- `modules/user/handler.go:10`
+  - `/user/login` 返回 `access_token` 与 `refresh_token`
+  - 新增 `/user/logout`（从 `Authorization` 头取 access，可选携带 refresh），写入黑名单
+  - 新增 `/user/refresh`（必需 `refresh_token`），返回新的 `access_token`
+
+**路由**
+- `server/router.go:20`
+  - `/user/login`、`/user/register`、`/user/logout`、`/user/refresh` 作为公共接口（登出依赖头部）
+  - 新增 `/api` 分组统一保护
+  - 将产品接口迁移至 `/api/product/list`、`/api/product/buy`
+
+**数据库迁移（保留你要的模式）**
+- `internal/database/mysql.go:1`
+  - `Init(dsn)` 成功后在 `APP_ENV=dev` 时执行 `migrate()`，使用 `pkg/model.User` 与 `pkg/model.Product`
+- `pkg/model/user.go:1`、`pkg/model/product.go:1` 存放数据模型，避免循环依赖
+
+**关键代码定位**
+- `pkg/config/config.go:8` 配置与全局 `Conf`
+- `middleware/jwt.go:1` 黑名单校验与鉴权
+- `modules/user/service.go:12` 登录/刷新/登出逻辑
+- `modules/user/handler.go:10` 登录返回 token 对；`handler.go:33` 登出；`handler.go:45` 刷新
+- `server/router.go:20` `/user/*`；`server/router.go:28` `/api/*`
+- `internal/database/mysql.go:1` `Init + migrate` 风格（`APP_ENV=dev`）
+
+**使用与验证**
+- 启动（开发自动迁移）：
+  - `APP_ENV=dev go run main.go`
+- 登录获取令牌：
+  - `curl -sS -X POST http://localhost:8080/user/login -H 'Content-Type: application/json' -d '{"username":"alice","password":"secret"}'`
+  - 响应包含 `access_token` 与 `refresh_token`
+- 使用 access 访问受保护接口：
+  - `curl -sS http://localhost:8080/api/product/list -H "Authorization: Bearer <access_token>"`
+- 刷新生成新 access：
+  - `curl -sS -X POST http://localhost:8080/user/refresh -H 'Content-Type: application/json' -d '{"refresh_token":"<refresh_token>"}'`
+- 登出（吊销当前 access，可选吊销 refresh）：
+  - `curl -sS -X POST http://localhost:8080/user/logout -H "Authorization: Bearer <access_token>" -H 'Content-Type: application/json' -d '{"refresh_token":"<refresh_token>"}'`
+  - 之后旧 access 再访问将返回 `{"code":10002,"msg":"token revoked"}`
+
+**注意事项**
+- Redis 未启动时，黑名单读写会被安全忽略（开发容错）；生产环境需开启 Redis
+- refresh token 目前不做轮换，仅校验 `typ=refresh`；如需严格一次性刷新，可在刷新后将旧 refresh 的 `jti` 加入黑名单并返回新的 refresh
+- 如需对 `/user/logout` 强制鉴权，可为该路由添加 `JWTAuth()` 中间件
+
+** TODO **
+- 目前refresh_token,access_token使用的是JWT格式，考虑是否需要切换为UUID（短token）格式
+- 考虑blacklist基于uid，这样可以实现用户级别的登出
+
+---
