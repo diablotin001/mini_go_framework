@@ -3,7 +3,7 @@
 ---
 # 为什么它能高并发
 
-## ** 使用 Gin 的最小化中间件（fast path）**
+## ** 使用 Gin 的最小化中间件(fast path) **
 
 ```go
 r := gin.New()
@@ -44,6 +44,7 @@ Go 的 HTTP Server 每个请求自动分配 goroutine，不需要你手写线程
 理论上轻松支撑 **几十万级 QPS 的并发阻塞场景（只要逻辑轻、IO 小）**。
 
 ---
+
 # STEP 2
 
 * ✅ **模块化目录结构（user / product 分模块）**
@@ -119,6 +120,7 @@ Gin + net/http 自带 goroutine 池，适合高负载。
 保障生产环境稳定性。
 
 ---
+
 # STEP3: 添加全局错误处理器（error handler）、统一返回结构（success/error struct）
 
 ---
@@ -181,16 +183,16 @@ r.Use(middleware.ErrorHandler())   // 全局错误处理
 
 ```go
 func Login(c *gin.Context) {
-	var req LoginRequest
+    var req LoginRequest
 
-	if err := c.ShouldBind(&req); err != nil {
-		c.Error(err) // 自动交给全局错误处理
-		return
-	}
+    if err := c.ShouldBind(&req); err != nil {
+        c.Error(err) // 自动交给全局错误处理
+        return
+    }
 
-	response.Success(c, gin.H{
-		"user": req.Username,
-	})
+    response.Success(c, gin.H{
+        "user": req.Username,
+    })
 }
 ```
 
@@ -258,9 +260,9 @@ Zap 使用 JSON 格式（适合 ELK / CloudWatch / Loki）
 
 ```go
 func main() {
-	logger.InitLogger() // 添加这一行
+    logger.InitLogger() // 添加这一行
 
-	...
+    ...
 }
 ```
 
@@ -319,12 +321,15 @@ zap.L().Error("db failed", zap.Error(err))
 ```
 
 ---
+
 # STEP5 — repo / service / handler（三层）
 
 前置条件：
+
 * 请自行准备可以访问的MySQL和Redis
 
 主要添加：
+
 * GORM(MySQL) + Redis 访问封装
 * 模块化：modules/user、modules/product（每个含 handler/service/repo/dto）
 
@@ -372,6 +377,7 @@ redis:
 logs:
   path: "logs/app.log"
 ```
+
 请设置user:pass为正确的用户名和密码
 ---
 
@@ -614,6 +620,7 @@ func Register(c *gin.Context) {
 ---
 
 # STEP6.1 — **完整的 JWT 鉴权方案**
+
 * middleware：JWTAuth
 * user/login：生成 JWT
 * config：JWT 配置
@@ -623,7 +630,7 @@ func Register(c *gin.Context) {
 
 ---
 
-# 1. 需要修改/新增的文件列表
+## 1. 需要修改/新增的文件列表
 
 ```
 config/config.go         ← 增加 JWT 配置读取
@@ -640,11 +647,11 @@ internal/server/router.go     ← /login 不需要鉴权，其他路由需要
 
 ---
 
-# 2. 修改内容（按文件分类）
+## 2. 修改内容（按文件分类）
 
 ---
 
-# 🔧 **config/config.go（增加 JWT 配置项）**
+### 🔧 **config/config.go（增加 JWT 配置项）**
 
 ```go
 type JWTConfig struct {
@@ -666,7 +673,7 @@ func Init(path string) {
 
 ---
 
-# 🔧 **config.yaml（新增 JWT 配置）**
+### 🔧 **config.yaml（新增 JWT 配置）**
 
 ```yaml
 jwt:
@@ -676,7 +683,7 @@ jwt:
 
 ---
 
-# **middleware/jwt.go（JWT 鉴权）**
+### **middleware/jwt.go（JWT 鉴权）**
 
 ```go
 package middleware
@@ -726,7 +733,7 @@ func JWTAuth() gin.HandlerFunc {
 
 ---
 
-# **internal/repo/user_repo.go（增加用于登录的查询）**
+### **internal/repo/user_repo.go（增加用于登录的查询）**
 
 ```go
 func (r *UserRepo) GetByUsername(username string) (*model.User, error) {
@@ -740,7 +747,7 @@ func (r *UserRepo) GetByUsername(username string) (*model.User, error) {
 
 ---
 
-# **internal/service/user_service.go（登录逻辑 + JWT 生成）**
+### **internal/service/user_service.go（登录逻辑 + JWT 生成）**
 
 ```go
 package service
@@ -785,7 +792,7 @@ func (s *UserService) Login(username, password string) (string, error) {
 
 ---
 
-# **internal/handler/user_handler.go（新增 /login 接口）**
+### **internal/handler/user_handler.go（新增 /login 接口）**
 
 ```go
 func (h *UserHandler) Login(c *gin.Context) {
@@ -810,7 +817,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 ---
 
-# **internal/server/router.go（路由分组）**
+### **internal/server/router.go（路由分组）**
 
 ```go
 r := gin.New()
@@ -831,9 +838,9 @@ authGroup := r.Group("/api", middleware.JWTAuth())
 
 ---
 
-# **完整 JWT 工作流**
+## **完整 JWT 工作流**
 
-## 1. 登录
+### 1. 登录
 
 POST `/user/login`
 → 校验用户
@@ -851,16 +858,18 @@ Authorization: Bearer xxxxx
 curl -X POST http://localhost:8080/user/login -H 'Content-Type: application/json' -d '{"username":"alice","password":"secret"}'
 ```
 
-## 2. 访问受保护接口
+### 2. 访问受保护接口
 
 客户端带着 token → middleware/JWTAuth
 → Token 有效 → 放行
 → Token 无效 → 401 返回错误
 
 测试命令
+
 ```bash
 curl -H "Authorization: Bearer <JWT>" http://localhost:8080/product/list
 ```
+
 注意：替换<JWT>为user/login返回的token
 
 ---
@@ -868,11 +877,14 @@ curl -H "Authorization: Bearer <JWT>" http://localhost:8080/product/list
 # STEP 6.2 access_token,refresh_token 刷新与登出
 
 ---
+
 **改动摘要**
+
 - 新增 `/api/*` 统一分组保护，使用 JWT 中间件统一鉴权
 - 完成 JWT 刷新与黑名单（登出/吊销）：登录返回 access/refresh，刷新生成新 access，登出将 jti 加入黑名单
 
 **配置**
+
 - `pkg/config/config.go:8` 新增 `JWT.RefreshExpire`，全局持有 `config.Conf`
 - `config.yaml:14` 新增：
   - `jwt.secret`（签名秘钥）
@@ -880,12 +892,14 @@ curl -H "Authorization: Bearer <JWT>" http://localhost:8080/product/list
   - `jwt.refresh_expire`（refresh token 有效期）
 
 **JWT 中间件**
+
 - `middleware/jwt.go:1` 增强校验：
   - 解析 `Authorization: Bearer <token>`
   - 读取 `jti`，查询黑名单 `jwt:blacklist:<jti>`（Redis），命中则拒绝
   - 将 `uid` 注入 `Context` 供业务使用
 
 **登录/刷新/登出**
+
 - `modules/user/service.go:1`
   - `LoginService(username, password) (*TokenPair, error)` 生成并返回 `access_token` 和 `refresh_token`
   - `RefreshService(refreshToken string) (string, error)` 校验 refresh token 的 `typ=refresh` 并生成新 access token
@@ -897,17 +911,20 @@ curl -H "Authorization: Bearer <JWT>" http://localhost:8080/product/list
   - 新增 `/user/refresh`（必需 `refresh_token`），返回新的 `access_token`
 
 **路由**
+
 - `server/router.go:20`
   - `/user/login`、`/user/register`、`/user/logout`、`/user/refresh` 作为公共接口（登出依赖头部）
   - 新增 `/api` 分组统一保护
   - 将产品接口迁移至 `/api/product/list`、`/api/product/buy`
 
 **数据库迁移（保留你要的模式）**
+
 - `internal/database/mysql.go:1`
   - `Init(dsn)` 成功后在 `APP_ENV=dev` 时执行 `migrate()`，使用 `pkg/model.User` 与 `pkg/model.Product`
 - `pkg/model/user.go:1`、`pkg/model/product.go:1` 存放数据模型，避免循环依赖
 
 **关键代码定位**
+
 - `pkg/config/config.go:8` 配置与全局 `Conf`
 - `middleware/jwt.go:1` 黑名单校验与鉴权
 - `modules/user/service.go:12` 登录/刷新/登出逻辑
@@ -916,6 +933,7 @@ curl -H "Authorization: Bearer <JWT>" http://localhost:8080/product/list
 - `internal/database/mysql.go:1` `Init + migrate` 风格（`APP_ENV=dev`）
 
 **使用与验证**
+
 - 启动（开发自动迁移）：
   - `APP_ENV=dev go run main.go`
 - 登录获取令牌：
@@ -930,12 +948,271 @@ curl -H "Authorization: Bearer <JWT>" http://localhost:8080/product/list
   - 之后旧 access 再访问将返回 `{"code":10002,"msg":"token revoked"}`
 
 **注意事项**
+
 - Redis 未启动时，黑名单读写会被安全忽略（开发容错）；生产环境需开启 Redis
 - refresh token 目前不做轮换，仅校验 `typ=refresh`；如需严格一次性刷新，可在刷新后将旧 refresh 的 `jti` 加入黑名单并返回新的 refresh
 - 如需对 `/user/logout` 强制鉴权，可为该路由添加 `JWTAuth()` 中间件
 
-** TODO **
+**TODO**
+
 - 目前refresh_token,access_token使用的是JWT格式，考虑是否需要切换为UUID（短token）格式
 - 考虑blacklist基于uid，这样可以实现用户级别的登出
+
+---
+
+# STEP 7 单元测试
+
+**最小可运行的单元测试示例**（涵盖 repo/service/handler 三层），全部是“基础示例”，可以复制后按功能继续扩展。
+
+---
+
+## 目录结构示例
+
+使用：
+
+* **github.com/DATA-DOG/go-sqlmock** → Mock MySQL（repo 测试用）
+* **net/http/httptest + gin** → handler 测试
+* **repo 使用 mock** → service 测试
+
+全部是业界常用做法。
+
+**说明**
+
+- `pkg/db/mysql_mock.go` 提供创建 GORM+sqlmock 的辅助函数
+- `modules/user/repo_test.go` 通过 sqlmock 验证查询逻辑
+- `modules/user/service_test.go` 通过 mock repo 验证登录生成 token
+- `modules/user/handler_test.go` 通过 httptest 验证 `/user/login` 响应结构
+
+**关键实现**
+
+- `pkg/db/mysql_mock.go:1` 新增 `NewMock(t)` 返回 `*gorm.DB` 与 `sqlmock`
+- `modules/user/repo_test.go:1`
+  - 设置 `internal/database.DB = NewMock(t)`
+  - 期望 SQL：`SELECT * FROM \`users\` WHERE username = ? ORDER BY \`users\`.\`id\` LIMIT ?`，参数 `("amy", 1)`
+  - 断言返回用户名正确
+- `modules/user/service.go:20`
+  - 新增 `IUserRepo` 接口与包级 `userRepo`（默认调用现有 `GetUserByUsername`）
+  - `LoginService` 使用 `userRepo`，便于在测试中注入 mock
+  - 登录返回 `TokenPair{access_token, refresh_token}`
+  - 提供 `RefreshService` 和 `LogoutService`（刷新、吊销）
+- `modules/user/service_test.go:1`
+  - 注入 `mockRepo` 至 `userRepo`
+  - 设置 `config.Conf.JWT.Secret`、`Expire`、`RefreshExpire`
+  - 校验 `LoginService` 成功与失败场景
+- `modules/user/handler_test.go:1`
+  - 设置 `gin.TestMode`
+  - 注入 `mockSvcRepo` 至 `userRepo`
+  - 配置 `config.Conf.JWT`
+  - 注册 `POST /login`，校验 200 与返回 `access_token` 非空
+
+---
+
+## repo 测试：Mock GORM + Mock MySQL
+
+❗ 不需要真实数据库。
+
+---
+
+### internal/repo/user_repo_test.go
+
+```go
+package repo_test
+
+import (
+    "regexp"
+    "testing"
+
+    "github.com/DATA-DOG/go-sqlmock"
+    "gorm.io/driver/mysql"
+    "gorm.io/gorm"
+
+    "yourapp/internal/model"
+    "yourapp/internal/repo"
+)
+
+func newMockDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
+    mockDB, mock, err := sqlmock.New()
+    if err != nil {
+        t.Fatalf("mock db err: %v", err)
+    }
+    dial := mysql.New(mysql.Config{
+        Conn:                      mockDB,
+        SkipInitializeWithVersion: true,
+    })
+    db, err := gorm.Open(dial, &gorm.Config{})
+    if err != nil {
+        t.Fatalf("gorm open err: %v", err)
+    }
+    return db, mock
+}
+
+func TestUserRepo_GetByUsername(t *testing.T) {
+    db, mock := newMockDB(t)
+
+    r := repo.NewUserRepo(db)
+
+    rows := sqlmock.NewRows([]string{"id", "username", "password"}).
+        AddRow(1, "amy", "123456")
+
+    mock.ExpectQuery(regexp.QuoteMeta(
+        "SELECT * FROM `users` WHERE username = ? ORDER BY `users`.`id` LIMIT 1",
+    )).
+        WithArgs("amy").
+        WillReturnRows(rows)
+
+    user, err := r.GetByUsername("amy")
+    if err != nil {
+        t.Fatalf("unexpected err: %v", err)
+    }
+
+    if user.Username != "amy" {
+        t.Fatalf("wrong username: %v", user.Username)
+    }
+}
+```
+
+---
+
+## service 测试：Mock Repo，不需要数据库
+
+使用最简单 mock（不引入 gomock）：
+
+---
+
+### internal/service/user_service_test.go
+
+```go
+package service_test
+
+import (
+    "errors"
+    "testing"
+
+    "yourapp/internal/model"
+    "yourapp/internal/service"
+)
+
+// ---- mock repo ----
+type mockUserRepo struct {
+    mockUser *model.User
+    mockErr  error
+}
+
+func (m *mockUserRepo) GetByUsername(username string) (*model.User, error) {
+    return m.mockUser, m.mockErr
+}
+
+func TestUserService_Login_Success(t *testing.T) {
+    r := &mockUserRepo{
+        mockUser: &model.User{
+            ID:       1,
+            Username: "amy",
+            Password: "123456",
+        },
+    }
+
+    s := service.NewUserService(r)
+
+    token, err := s.Login("amy", "123456")
+    if err != nil {
+        t.Fatalf("unexpected error: %v", err)
+    }
+
+    if token == "" {
+        t.Fatalf("empty token")
+    }
+}
+
+func TestUserService_Login_Fail(t *testing.T) {
+    r := &mockUserRepo{
+        mockErr: errors.New("not found"),
+    }
+    s := service.NewUserService(r)
+
+    _, err := s.Login("not_exist", "xx")
+    if err == nil {
+        t.Fatal("expected error, got none")
+    }
+}
+```
+
+---
+
+## handler 测试：使用 httptest + gin
+
+---
+
+### internal/handler/user_handler_test.go
+
+```go
+package handler_test
+
+import (
+    "bytes"
+    "encoding/json"
+    "net/http"
+    "net/http/httptest"
+    "testing"
+
+    "github.com/gin-gonic/gin"
+
+    "yourapp/internal/handler"
+    "yourapp/internal/service"
+    "yourapp/internal/model"
+)
+
+// mock service
+type mockUserService struct {
+    token string
+    err   error
+}
+
+func (m *mockUserService) Login(username, password string) (string, error) {
+    return m.token, m.err
+}
+
+func TestUserHandler_Login(t *testing.T) {
+    gin.SetMode(gin.TestMode)
+
+    svc := &mockUserService{token: "mock_token"}
+
+    h := handler.NewUserHandler(svc)
+
+    router := gin.Default()
+    router.POST("/login", h.Login)
+
+    payload := map[string]string{
+        "username": "amy",
+        "password": "123456",
+    }
+    body, _ := json.Marshal(payload)
+
+    req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewBuffer(body))
+    req.Header.Set("Content-Type", "application/json")
+
+    w := httptest.NewRecorder()
+    router.ServeHTTP(w, req)
+
+    if w.Code != 200 {
+        t.Fatalf("expected 200, got %d", w.Code)
+    }
+
+    var resp struct {
+        Code int `json:"code"`
+        Data struct {
+            Token string `json:"token"`
+        }
+    }
+    json.Unmarshal(w.Body.Bytes(), &resp)
+
+    if resp.Data.Token != "mock_token" {
+        t.Fatalf("token mismatch: %v", resp.Data.Token)
+    }
+}
+```
+
+## 使用说明
+
+- 运行全部测试：`go test ./... -v`
 
 ---

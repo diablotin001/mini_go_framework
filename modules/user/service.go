@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+	// "fmt"
 	"mini_go/pkg/cache"
 	"mini_go/pkg/config"
 	"mini_go/pkg/model"
@@ -16,8 +17,20 @@ type TokenPair struct {
 	RefreshToken string
 }
 
+type IUserRepo interface {
+	GetByUsername(username string) (*model.User, error)
+}
+
+var userRepo IUserRepo = defaultRepo{}
+
+type defaultRepo struct{}
+
+func (defaultRepo) GetByUsername(username string) (*model.User, error) {
+	return GetUserByUsername(username)
+}
+
 func LoginService(username, password string) (*TokenPair, error) {
-	u, err := GetUserByUsername(username)
+	u, err := userRepo.GetByUsername(username)
 	if err != nil {
 		return nil, err
 	}
