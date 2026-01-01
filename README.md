@@ -235,7 +235,7 @@ func Login(c *gin.Context) {
 
 ## 最终效果展示
 
-### ✔ 成功统一格式：
+### 成功统一格式：
 
 ```json
 {
@@ -1257,9 +1257,9 @@ func TestUserHandler_Login(t *testing.T) {
 ---
 
 内容包括：
-**1 多环境日志 dev/prod
-2 GORM + Redis 的 SQL 执行时间拦截 + Zap 打印
-3 支持自动根据环境启用不同的输出格式（console/json）**
+**1. 多环境日志 dev/prod 
+2. GORM + Redis 的 SQL 执行时间拦截 + Zap 打印 
+3. 支持自动根据环境启用不同的输出格式（console/json）**
 
 ---
 
