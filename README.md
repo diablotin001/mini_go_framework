@@ -1216,3 +1216,267 @@ func TestUserHandler_Login(t *testing.T) {
 - 运行全部测试：`go test ./... -v`
 
 ---
+# STEP8 多环境日志（dev、prod）、 MySQL + Redis + zap 打印 SQL 执行时间
+---
+内容包括：
+**1 多环境日志 dev/prod
+2 GORM + Redis 的 SQL 执行时间拦截 + Zap 打印
+3 支持自动根据环境启用不同的输出格式（console/json）**
+
+---
+
+## 1. 配置文件新增字段（config.yaml）
+
+```yaml
+app:
+  env: dev   # or prod
+
+log:
+  level: info
+  format: console  # dev = console，prod = json
+  file: "./logs/app.log"
+
+database:
+  dsn: "user:pass@tcp(127.0.0.1:3306)/demo?charset=utf8mb4&parseTime=True&loc=Local"
+  log_level: 4   # 1=Silent 2=Error 3=Warn 4=Info
+  slow_threshold_ms: 200
+
+redis:
+  addr: "127.0.0.1:6379"
+  db: 0
+```
+
+---
+
+## 2. 新增日志初始化（pkg/logger/logger.go）
+
+Zap Logger 增强版：支持 console/json 格式 + dev/prod 自动切换
+
+```go
+package logger
+
+import (
+	"os"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+var Log *zap.Logger
+
+type LogConfig struct {
+	Level  string
+	Format string // console / json
+	File   string
+	Env    string // dev / prod
+}
+
+func Init(cfg LogConfig) error {
+	var level zapcore.Level
+	if err := level.Set(cfg.Level); err != nil {
+		level = zap.InfoLevel
+	}
+
+	// encoder
+	var encoder zapcore.Encoder
+	if cfg.Format == "json" || cfg.Env == "prod" {
+		encoder = zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+	} else {
+		encoder = zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+	}
+
+	// log file writer
+	fileWriter := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   cfg.File,
+		MaxSize:    50,
+		MaxBackups: 5,
+		MaxAge:     28,
+	})
+
+	core := zapcore.NewCore(encoder, zapcore.NewMultiWriteSyncer(fileWriter, zapcore.AddSync(os.Stdout)), level)
+
+	Log = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+	return nil
+}
+```
+
+> dev 默认 console，prod 默认 json
+> 文件输出 + 控制台混合输出
+
+---
+
+## 3. GORM SQL 执行时间拦截（pkg/db/gorm_logger.go）
+
+让 MySQL 的 SQL、耗时、慢查询全部写入 Zap
+
+```go
+package db
+
+import (
+	"context"
+	"time"
+
+	"github.com/your_project/pkg/logger"
+	"go.uber.org/zap"
+	"gorm.io/gorm/logger"
+)
+
+type ZapGormLogger struct {
+	SlowThreshold time.Duration
+	LogLevel      logger.LogLevel
+}
+
+func NewZapGormLogger(slowMS int, level logger.LogLevel) *ZapGormLogger {
+	return &ZapGormLogger{
+		SlowThreshold: time.Duration(slowMS) * time.Millisecond,
+		LogLevel:      level,
+	}
+}
+
+func (l *ZapGormLogger) LogMode(level logger.LogLevel) logger.Interface {
+	l.LogLevel = level
+	return l
+}
+
+func (l *ZapGormLogger) Info(ctx context.Context, msg string, args ...interface{}) {
+	logger.Log.Sugar().Infof(msg, args...)
+}
+
+func (l *ZapGormLogger) Warn(ctx context.Context, msg string, args ...interface{}) {
+	logger.Log.Sugar().Warnf(msg, args...)
+}
+
+func (l *ZapGormLogger) Error(ctx context.Context, msg string, args ...interface{}) {
+	logger.Log.Sugar().Errorf(msg, args...)
+}
+
+func (l *ZapGormLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+	elapsed := time.Since(begin)
+	sql, rows := fc()
+
+	fields := []zap.Field{
+		zap.Duration("elapsed", elapsed),
+		zap.String("sql", sql),
+		zap.Int64("rows", rows),
+	}
+
+	switch {
+	case err != nil:
+		logger.Log.Error("SQL Error", append(fields, zap.Error(err))...)
+	case elapsed > l.SlowThreshold:
+		logger.Log.Warn("Slow SQL", fields...)
+	default:
+		logger.Log.Info("SQL", fields...)
+	}
+}
+```
+
+---
+
+## 4. GORM 初始化（pkg/db/mysql.go）
+
+```go
+package db
+
+import (
+	"log"
+
+	"github.com/spf13/viper"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	gormLogger "gorm.io/gorm/logger"
+)
+
+var DB *gorm.DB
+
+func InitMySQL() {
+	cfg := viper.GetStringMapString("database")
+
+	dsn := cfg["dsn"]
+
+	logLevel := gormLogger.LogLevel(viper.GetInt("database.log_level"))
+	slowMS := viper.GetInt("database.slow_threshold_ms")
+
+	gLogger := NewZapGormLogger(slowMS, logLevel)
+
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: gLogger,
+	})
+	if err != nil {
+		log.Fatalf("MySQL connection failed: %v", err)
+	}
+
+	DB = db
+}
+```
+
+---
+
+## 5. Redis 打印执行时间（pkg/redis/redis.go）
+
+```go
+package redis
+
+import (
+	"time"
+
+	"github.com/redis/go-redis/v9"
+	"github.com/spf13/viper"
+	"github.com/your_project/pkg/logger"
+)
+
+var Rdb *redis.Client
+
+func InitRedis() {
+	addr := viper.GetString("redis.addr")
+	db := viper.GetInt("redis.db")
+
+	Rdb = redis.NewClient(&redis.Options{
+		Addr: addr,
+		DB:   db,
+	})
+
+	// Wrap Do for time logging
+	origDo := Rdb.Process
+	Rdb.AddHook(redis.Hook{
+		BeforeProcess: func(ctx context.Context, cmd redis.Cmder) (context.Context, error) {
+			return context.WithValue(ctx, "start", time.Now()), nil
+		},
+		AfterProcess: func(ctx context.Context, cmd redis.Cmder) error {
+			start := ctx.Value("start").(time.Time)
+			cost := time.Since(start)
+			logger.Log.Info("Redis",
+				zap.String("cmd", cmd.FullName()),
+				zap.String("args", fmt.Sprint(cmd.Args())),
+				zap.Duration("cost", cost),
+			)
+			return nil
+		},
+	})
+}
+```
+
+---
+
+## 6. 最终效果
+
+### Dev 环境输出（控制台）
+
+```
+2025-01-01 SQL elapsed=18.2ms sql="SELECT ..." rows=1
+2025-01-01 Redis cmd=GET args=[user:1] cost=1.3ms
+```
+
+### Prod 环境输出（json）
+
+```json
+{
+  "level": "info",
+  "sql": "SELECT ...",
+  "elapsed": "20ms",
+  "rows": 1,
+  "timestamp": "2025-01-01T12:00:00"
+}
+```
+
+---

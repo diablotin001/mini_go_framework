@@ -8,11 +8,16 @@ import (
 )
 
 type Config struct {
+    App struct {
+        Env string `yaml:"env"`
+    } `yaml:"app"`
     Server struct {
         Addr string `yaml:"addr"`
     } `yaml:"server"`
     DB struct {
-        DSN string `yaml:"dsn"`
+        DSN             string `yaml:"dsn"`
+        LogLevel        int    `yaml:"log_level"`
+        SlowThresholdMS int    `yaml:"slow_threshold_ms"`
     } `yaml:"db"`
     Redis struct {
         Addr     string `yaml:"addr"`
@@ -20,7 +25,9 @@ type Config struct {
         DB       int    `yaml:"db"`
     } `yaml:"redis"`
     Logs struct {
-        Path string `yaml:"path"`
+        Path   string `yaml:"path"`
+        Level  string `yaml:"level"`
+        Format string `yaml:"format"`
     } `yaml:"logs"`
     JWT struct {
         Secret        string       `yaml:"secret"`

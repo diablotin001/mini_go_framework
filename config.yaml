@@ -1,13 +1,19 @@
+app:
+  env: dev
 server:
   addr: ":8080"
 db:
   dsn: "root:aaaaaa@tcp(127.0.0.1:3306)/jc_test?charset=utf8mb4&parseTime=True&loc=Local"
+  log_level: 4
+  slow_threshold_ms: 200
 redis:
   addr: "127.0.0.1:6379"
   password: ""
   db: 0
 logs:
   path: "logs/app.log"
+  level: "info"
+  format: "console"
 jwt:
   secret: "my_super_secret_key_123"
   expire: "72h"

@@ -16,7 +16,7 @@ func main() {
         panic(err)
     }
 
-    logger.InitLogger(cfg.Logs.Path)
+    _ = logger.Init(logger.LogConfig{Level: cfg.Logs.Level, Format: cfg.Logs.Format, File: cfg.Logs.Path, Env: cfg.App.Env})
 
     database.Init(cfg.DB.DSN)
     if err := cache.InitRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB); err != nil {
