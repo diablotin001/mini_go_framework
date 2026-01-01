@@ -1,24 +1,24 @@
 # 使用说明
 
-** 本项目是一个基于 Gin 框架的极简 Go 项目模板，用于快速搭建高并发服务。**
-** 它的优势在于：**
+**本项目是一个基于 Gin 框架的极简 Go 项目模板，用于快速搭建高并发服务。**
+**它的优势在于：**
 
 * **极简**：代码量少，结构清晰，符合工程化最佳实践。
 * **高并发**：基于 Gin 的最小化中间件(fast path)，避免了不必要的开销。
 * **可扩展**：模块化目录结构，方便添加新功能模块。
 
-** 如何使用**
+**如何使用**
 
 1. **克隆项目**：`git clone https://github.com/diablotin001/mini_go_framework.git`
 2. **安装依赖**：`go mod tidy`
 3. **运行项目**：`go run main.go`
 
-** 如何学习 **
+**如何学习**
 
 * 建议先从 **STEP 1** 开始，理解为什么它能高并发。
 * 然后逐步学习 **STEP 2**，掌握项目的模块化目录结构和优雅关闭。
 
-** 每一步对应的git版本 **
+**每一步对应的git版本**
 
 * **STEP 1**：`git checkout step1`
 * **STEP 2**：`git checkout step2`
@@ -38,7 +38,7 @@
 
 # 为什么它能高并发
 
-## ** 使用 Gin 的最小化中间件(fast path) **
+## **使用 Gin 的最小化中间件(fast path)**
 
 ```go
 r := gin.New()
@@ -50,7 +50,7 @@ r.Use(gin.Recovery())
 
 ---
 
-## ** 使用 http.Server 调优**
+## **使用 http.Server 调优**
 
 Gin 默认的 `r.Run()` 会使用默认配置，不够强壮。
 这里自定义了：
@@ -73,7 +73,7 @@ Gin 默认的 `r.Run()` 会使用默认配置，不够强壮。
 
 ---
 
-## ** Go 原生 goroutine = 高并发的核心**
+## **Go 原生 goroutine = 高并发的核心**
 
 Go 的 HTTP Server 每个请求自动分配 goroutine，不需要你手写线程池。
 理论上轻松支撑 **几十万级 QPS 的并发阻塞场景（只要逻辑轻、IO 小）**。
@@ -82,15 +82,15 @@ Go 的 HTTP Server 每个请求自动分配 goroutine，不需要你手写线程
 
 # STEP 2
 
-* ✅ **模块化目录结构（user / product 分模块）**
-* ✅ **优雅关闭（graceful shutdown）**
-* ✅ **中间件统一参数验证（bind + validate）**
-* ✅ **极简、高并发、可扩展**
+* **模块化目录结构（user / product 分模块）**
+* **优雅关闭（graceful shutdown）**
+* **中间件统一参数验证（bind + validate）**
+* **极简、高并发、可扩展**
 
 代码很短，但结构干净、符合工程化最佳实践。
 ---
 
-# ✅ 项目结构（推荐）
+## 项目结构（推荐）
 
 ```
 mini_go_framework/
@@ -114,13 +114,13 @@ mini_go_framework/
 
 ---
 
-# 🧩 **main.go（包含优雅关闭）**
+## **main.go（包含优雅关闭）**
 
-# 🧩 server/router.go（模块化路由）
+## server/router.go（模块化路由）
 
-# 🧩 server/shutdown.go（优雅关闭）
+## server/shutdown.go（优雅关闭）
 
-# 🧩 middleware/validate.go（统一参数验证中间件）
+## middleware/validate.go（统一参数验证中间件）
 
 这个中间件会：
 
@@ -128,15 +128,15 @@ mini_go_framework/
 * 自动验证 struct 标签（binding:"required"）
 * 参数错误时返回 400
 
-# 🧩 modules/user/dto.go（参数定义）
+## modules/user/dto.go（参数定义）
 
-# 🧩 modules/user/handler.go
+## modules/user/handler.go
 
-# 🧩 modules/product/dto.go
+## modules/product/dto.go
 
-# 🧩 modules/product/handler.go
+## modules/product/handler.go
 
-# ⭐ 为什么这个结构适合高并发和可扩展？
+## 为什么这个结构适合高并发和可扩展？
 
 ### 1. **模块拆分清晰（DDD 轻量级风格）**
 
@@ -169,7 +169,7 @@ Gin + net/http 自带 goroutine 池，适合高负载。
 
 ---
 
-# ✅ **一、统一返回结构 response/**
+## **一、统一返回结构 response/**
 
 目录
 
@@ -182,23 +182,23 @@ response/
 
 ---
 
-# 🧩 response/response.go（统一 Success 返回）
+## response/response.go（统一 Success 返回）
 
 ---
 
-# 🧩 response/codes.go（自定义错误码：可无限扩展）
+## response/codes.go（自定义错误码：可无限扩展）
 
 ---
 
-# 🧩 response/error.go（错误统一格式）
+## response/error.go（错误统一格式）
 
 ---
 
-# ✅ **二、全局错误处理器 middleware/error_handler.go**
+## **二、全局错误处理器 middleware/error_handler.go**
 
 ---
 
-# ⭐ ** server/router.go 加这个中间件**
+## **server/router.go 加这个中间件**
 
 ```go
 ...
@@ -208,13 +208,13 @@ r.Use(middleware.ErrorHandler())   // 全局错误处理
 
 ---
 
-# 📌 三、修改 Validator 中间件
+## 三、修改 Validator 中间件
 
 ---
 
-# 📌 四、业务 Handler 改为使用统一响应
+## 四、业务 Handler 改为使用统一响应
 
-## user/login：
+### user/login：
 
 ```go
 func Login(c *gin.Context) {
@@ -233,9 +233,9 @@ func Login(c *gin.Context) {
 
 ---
 
-# 🎉 最终效果展示
+## 最终效果展示
 
-## ✔ 成功统一格式：
+### ✔ 成功统一格式：
 
 ```json
 {
@@ -247,7 +247,7 @@ func Login(c *gin.Context) {
 }
 ```
 
-## ❌ 系统错误统一格式：
+### 系统错误统一格式：
 
 ```json
 {
@@ -268,7 +268,7 @@ func Login(c *gin.Context) {
 
 ---
 
-# 一、目录结构（新增 logger/）
+## 一、目录结构（新增 logger/）
 
 ```
 yourapp/
@@ -282,7 +282,7 @@ yourapp/
 
 ---
 
-# 二、生产级 Zap 日志初始化（JSON + 文件分割）
+## 二、生产级 Zap 日志初始化（JSON + 文件分割）
 
 位置：`logger/logger.go`
 
@@ -291,7 +291,7 @@ Zap 使用 JSON 格式（适合 ELK / CloudWatch / Loki）
 
 ---
 
-# 三、在 main.go 初始化 Zap 日志
+## 三、在 main.go 初始化 Zap 日志
 
 ```go
 func main() {
@@ -303,23 +303,23 @@ func main() {
 
 ---
 
-# 四、接入 Gin 请求日志（用 Zap 替换 Gin 的默认日志）
+## 四、接入 Gin 请求日志（用 Zap 替换 Gin 的默认日志）
 
 新增文件：
 
-## `middleware/zap_request.go`
+### `middleware/zap_request.go`
 
 ---
 
-# 五、Zap Panic 恢复（带 stacktrace）
+## 五、Zap Panic 恢复（带 stacktrace）
 
 新增文件：
 
-## `middleware/zap_recovery.go`
+### `middleware/zap_recovery.go`
 
 ---
 
-# 六、在 router.go 中启用 Zap 中间件
+## 六、在 router.go 中启用 Zap 中间件
 
 ```go
 r := gin.New()
@@ -332,7 +332,7 @@ r.Use(middleware.ZapRecovery())  // panic 日志
 
 ---
 
-# 七、业务模块可以直接使用 Zap
+## 七、业务模块可以直接使用 Zap
 
 任何地方都可以：
 
@@ -343,7 +343,7 @@ zap.L().Error("db failed", zap.Error(err))
 
 ---
 
-# 八、日志输出示例（JSON，可直接进入 ELK）
+## 八、日志输出示例（JSON，可直接进入 ELK）
 
 ```json
 {
