@@ -1,6 +1,41 @@
+# 使用说明
+
+** 本项目是一个基于 Gin 框架的极简 Go 项目模板，用于快速搭建高并发服务。**
+** 它的优势在于：**
+
+* **极简**：代码量少，结构清晰，符合工程化最佳实践。
+* **高并发**：基于 Gin 的最小化中间件(fast path)，避免了不必要的开销。
+* **可扩展**：模块化目录结构，方便添加新功能模块。
+
+** 如何使用**
+
+1. **克隆项目**：`git clone https://github.com/diablotin001/mini_go_framework.git`
+2. **安装依赖**：`go mod tidy`
+3. **运行项目**：`go run main.go`
+
+** 如何学习 **
+
+* 建议先从 **STEP 1** 开始，理解为什么它能高并发。
+* 然后逐步学习 **STEP 2**，掌握项目的模块化目录结构和优雅关闭。
+
+** 每一步对应的git版本 **
+
+* **STEP 1**：`git checkout step1`
+* **STEP 2**：`git checkout step2`
+* **STEP 3**：`git checkout step3`
+* **STEP 4**：`git checkout step4`
+* **STEP 5**：`git checkout step5`
+* **STEP 6.1**：`git checkout step6.1`
+* **STEP 6.2**：`git checkout step6.2`
+* **STEP 7**：`git checkout step7`
+* **STEP 8**：`git checkout step8`
+
 ---
+
 # STEP 1
+
 ---
+
 # 为什么它能高并发
 
 ## ** 使用 Gin 的最小化中间件(fast path) **
@@ -1216,8 +1251,11 @@ func TestUserHandler_Login(t *testing.T) {
 - 运行全部测试：`go test ./... -v`
 
 ---
+
 # STEP8 多环境日志（dev、prod）、 MySQL + Redis + zap 打印 SQL 执行时间
+
 ---
+
 内容包括：
 **1 多环境日志 dev/prod
 2 GORM + Redis 的 SQL 执行时间拦截 + Zap 打印
@@ -1256,47 +1294,47 @@ Zap Logger 增强版：支持 console/json 格式 + dev/prod 自动切换
 package logger
 
 import (
-	"os"
+    "os"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+    "go.uber.org/zap"
+    "go.uber.org/zap/zapcore"
 )
 
 var Log *zap.Logger
 
 type LogConfig struct {
-	Level  string
-	Format string // console / json
-	File   string
-	Env    string // dev / prod
+    Level  string
+    Format string // console / json
+    File   string
+    Env    string // dev / prod
 }
 
 func Init(cfg LogConfig) error {
-	var level zapcore.Level
-	if err := level.Set(cfg.Level); err != nil {
-		level = zap.InfoLevel
-	}
+    var level zapcore.Level
+    if err := level.Set(cfg.Level); err != nil {
+        level = zap.InfoLevel
+    }
 
-	// encoder
-	var encoder zapcore.Encoder
-	if cfg.Format == "json" || cfg.Env == "prod" {
-		encoder = zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
-	} else {
-		encoder = zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
-	}
+    // encoder
+    var encoder zapcore.Encoder
+    if cfg.Format == "json" || cfg.Env == "prod" {
+        encoder = zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+    } else {
+        encoder = zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+    }
 
-	// log file writer
-	fileWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   cfg.File,
-		MaxSize:    50,
-		MaxBackups: 5,
-		MaxAge:     28,
-	})
+    // log file writer
+    fileWriter := zapcore.AddSync(&lumberjack.Logger{
+        Filename:   cfg.File,
+        MaxSize:    50,
+        MaxBackups: 5,
+        MaxAge:     28,
+    })
 
-	core := zapcore.NewCore(encoder, zapcore.NewMultiWriteSyncer(fileWriter, zapcore.AddSync(os.Stdout)), level)
+    core := zapcore.NewCore(encoder, zapcore.NewMultiWriteSyncer(fileWriter, zapcore.AddSync(os.Stdout)), level)
 
-	Log = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
-	return nil
+    Log = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+    return nil
 }
 ```
 
@@ -1313,61 +1351,61 @@ func Init(cfg LogConfig) error {
 package db
 
 import (
-	"context"
-	"time"
+    "context"
+    "time"
 
-	"github.com/your_project/pkg/logger"
-	"go.uber.org/zap"
-	"gorm.io/gorm/logger"
+    "github.com/your_project/pkg/logger"
+    "go.uber.org/zap"
+    "gorm.io/gorm/logger"
 )
 
 type ZapGormLogger struct {
-	SlowThreshold time.Duration
-	LogLevel      logger.LogLevel
+    SlowThreshold time.Duration
+    LogLevel      logger.LogLevel
 }
 
 func NewZapGormLogger(slowMS int, level logger.LogLevel) *ZapGormLogger {
-	return &ZapGormLogger{
-		SlowThreshold: time.Duration(slowMS) * time.Millisecond,
-		LogLevel:      level,
-	}
+    return &ZapGormLogger{
+        SlowThreshold: time.Duration(slowMS) * time.Millisecond,
+        LogLevel:      level,
+    }
 }
 
 func (l *ZapGormLogger) LogMode(level logger.LogLevel) logger.Interface {
-	l.LogLevel = level
-	return l
+    l.LogLevel = level
+    return l
 }
 
 func (l *ZapGormLogger) Info(ctx context.Context, msg string, args ...interface{}) {
-	logger.Log.Sugar().Infof(msg, args...)
+    logger.Log.Sugar().Infof(msg, args...)
 }
 
 func (l *ZapGormLogger) Warn(ctx context.Context, msg string, args ...interface{}) {
-	logger.Log.Sugar().Warnf(msg, args...)
+    logger.Log.Sugar().Warnf(msg, args...)
 }
 
 func (l *ZapGormLogger) Error(ctx context.Context, msg string, args ...interface{}) {
-	logger.Log.Sugar().Errorf(msg, args...)
+    logger.Log.Sugar().Errorf(msg, args...)
 }
 
 func (l *ZapGormLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-	elapsed := time.Since(begin)
-	sql, rows := fc()
+    elapsed := time.Since(begin)
+    sql, rows := fc()
 
-	fields := []zap.Field{
-		zap.Duration("elapsed", elapsed),
-		zap.String("sql", sql),
-		zap.Int64("rows", rows),
-	}
+    fields := []zap.Field{
+        zap.Duration("elapsed", elapsed),
+        zap.String("sql", sql),
+        zap.Int64("rows", rows),
+    }
 
-	switch {
-	case err != nil:
-		logger.Log.Error("SQL Error", append(fields, zap.Error(err))...)
-	case elapsed > l.SlowThreshold:
-		logger.Log.Warn("Slow SQL", fields...)
-	default:
-		logger.Log.Info("SQL", fields...)
-	}
+    switch {
+    case err != nil:
+        logger.Log.Error("SQL Error", append(fields, zap.Error(err))...)
+    case elapsed > l.SlowThreshold:
+        logger.Log.Warn("Slow SQL", fields...)
+    default:
+        logger.Log.Info("SQL", fields...)
+    }
 }
 ```
 
@@ -1379,34 +1417,34 @@ func (l *ZapGormLogger) Trace(ctx context.Context, begin time.Time, fc func() (s
 package db
 
 import (
-	"log"
+    "log"
 
-	"github.com/spf13/viper"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-	gormLogger "gorm.io/gorm/logger"
+    "github.com/spf13/viper"
+    "gorm.io/driver/mysql"
+    "gorm.io/gorm"
+    gormLogger "gorm.io/gorm/logger"
 )
 
 var DB *gorm.DB
 
 func InitMySQL() {
-	cfg := viper.GetStringMapString("database")
+    cfg := viper.GetStringMapString("database")
 
-	dsn := cfg["dsn"]
+    dsn := cfg["dsn"]
 
-	logLevel := gormLogger.LogLevel(viper.GetInt("database.log_level"))
-	slowMS := viper.GetInt("database.slow_threshold_ms")
+    logLevel := gormLogger.LogLevel(viper.GetInt("database.log_level"))
+    slowMS := viper.GetInt("database.slow_threshold_ms")
 
-	gLogger := NewZapGormLogger(slowMS, logLevel)
+    gLogger := NewZapGormLogger(slowMS, logLevel)
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: gLogger,
-	})
-	if err != nil {
-		log.Fatalf("MySQL connection failed: %v", err)
-	}
+    db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+        Logger: gLogger,
+    })
+    if err != nil {
+        log.Fatalf("MySQL connection failed: %v", err)
+    }
 
-	DB = db
+    DB = db
 }
 ```
 
@@ -1418,41 +1456,41 @@ func InitMySQL() {
 package redis
 
 import (
-	"time"
+    "time"
 
-	"github.com/redis/go-redis/v9"
-	"github.com/spf13/viper"
-	"github.com/your_project/pkg/logger"
+    "github.com/redis/go-redis/v9"
+    "github.com/spf13/viper"
+    "github.com/your_project/pkg/logger"
 )
 
 var Rdb *redis.Client
 
 func InitRedis() {
-	addr := viper.GetString("redis.addr")
-	db := viper.GetInt("redis.db")
+    addr := viper.GetString("redis.addr")
+    db := viper.GetInt("redis.db")
 
-	Rdb = redis.NewClient(&redis.Options{
-		Addr: addr,
-		DB:   db,
-	})
+    Rdb = redis.NewClient(&redis.Options{
+        Addr: addr,
+        DB:   db,
+    })
 
-	// Wrap Do for time logging
-	origDo := Rdb.Process
-	Rdb.AddHook(redis.Hook{
-		BeforeProcess: func(ctx context.Context, cmd redis.Cmder) (context.Context, error) {
-			return context.WithValue(ctx, "start", time.Now()), nil
-		},
-		AfterProcess: func(ctx context.Context, cmd redis.Cmder) error {
-			start := ctx.Value("start").(time.Time)
-			cost := time.Since(start)
-			logger.Log.Info("Redis",
-				zap.String("cmd", cmd.FullName()),
-				zap.String("args", fmt.Sprint(cmd.Args())),
-				zap.Duration("cost", cost),
-			)
-			return nil
-		},
-	})
+    // Wrap Do for time logging
+    origDo := Rdb.Process
+    Rdb.AddHook(redis.Hook{
+        BeforeProcess: func(ctx context.Context, cmd redis.Cmder) (context.Context, error) {
+            return context.WithValue(ctx, "start", time.Now()), nil
+        },
+        AfterProcess: func(ctx context.Context, cmd redis.Cmder) error {
+            start := ctx.Value("start").(time.Time)
+            cost := time.Since(start)
+            logger.Log.Info("Redis",
+                zap.String("cmd", cmd.FullName()),
+                zap.String("args", fmt.Sprint(cmd.Args())),
+                zap.Duration("cost", cost),
+            )
+            return nil
+        },
+    })
 }
 ```
 
